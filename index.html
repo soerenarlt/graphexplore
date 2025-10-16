@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>graph explore</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171923;
+    --text: #e6e6e6;
+    --muted: #9aa0a6;
+    --btn: #2b2f3a;
+    --btn-hover: #3a3f4d;
+    --fixed-fill: #21314f; /* fill for fixed nodes */
+  }
+  html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; }
+  .wrap { display: grid; grid-template-columns: 360px 1fr; grid-template-rows: auto 1fr; gap: 10px; height: 100%; padding: 10px; box-sizing: border-box; }
+  header { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; background: var(--panel); padding: 10px 14px; border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.03); }
+  header h1 { margin: 0; font-size: 16px; letter-spacing: .3px; color: #d7d7d7; }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  button, .file-btn {
+    background: var(--btn); color: var(--text);
+    border: 1px solid #272b35; border-radius: 10px; padding: 8px 10px;
+    cursor: pointer; transition: background .15s ease; display: inline-flex; align-items: center; gap: 8px;
+  }
+  button:hover, .file-btn:hover { background: var(--btn-hover); }
+  button:active { transform: translateY(1px); }
+  input[type="file"] { display: none; }
+  #sidebar { background: var(--panel); border-radius: 12px; padding: 10px; box-shadow: 0 4px 16px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.03); display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+  textarea { width: 100%; min-height: 220px; resize: vertical; background: #0d0f14; color: var(--text); border: 1px solid #272b35; border-radius: 10px; padding: 10px; box-sizing: border-box; font-family: ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace; font-size: 12px; line-height: 1.35; }
+  .hint { color: var(--muted); font-size: 12px; }
+  .legend { display: grid; grid-template-columns: auto 1fr; gap: 6px 10px; align-items: center; background: #11131a; padding: 8px 10px; border-radius: 10px; border: 1px solid #272b35; }
+  .badge { width: 16px; height: 16px; border-radius: 50%; border: 2px solid #202533; box-sizing: border-box; }
+  .blue { background: #4ea1ff; } 
+  .red { background: #ff6b6b; } 
+  .green { background: #6ede8a; }
+  .orange { background: #ffa94d; }
+  .purple { background: #b28dff; }
+  .canvas-wrap { position: relative; background: #0b0d12; border-radius: 12px; overflow: hidden; border: 1px solid #1e2230; }
+  svg { width: 100%; height: 100%; display: block; }
+  .toast { position: absolute; right: 10px; bottom: 10px; background: rgba(0,0,0,.6); border: 1px solid #2a2f3d; color: #d8dee9; padding: 6px 10px; border-radius: 8px; font-size: 12px; pointer-events: none; }
+  @media (max-width: 900px) { .wrap { grid-template-columns: 1fr; grid-template-rows: auto auto 1fr; } }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>graph explore</h1>
+      <div class="controls">
+        <button id="loadBtn">Load Graph</button>
+        <button id="repositionBtn">Reposition</button>
+        <button id="clearFixBtn">Clear Fixed</button>
+        <label class="file-btn" title="Upload a JSON file with a top-level 'graph' key">
+          <input type="file" id="fileInput" accept=".json,application/json" />
+          Upload JSON
+        </label>
+        <span class="hint">Drag to move (drop = <strong>fixed</strong>). Click a fixed node to release.</span>
+      </div>
+    </header>
+
+    <aside id="sidebar">
+      <textarea id="edgeInput" spellcheck="false">{
+  "(0, 4, 1, 0)": 1.0,
+  "(1, 3, 1, 1)": -1.0,
+  "(1, 5, 2, 0)": 1.0,
+  "(2, 5, 1, 0)": -1.0,
+  "(3, 5, 1, 0)": 1.0,
+  "(3, 7, 2, 0)": 1.0,
+  "(5, 7, 0, 0)": -1.0,
+  "(0, 2, 0, 0)": 1.0,
+  "(1, 4, 0, 0)": -1.0,
+  "(2, 7, 1, 0)": 1.0,
+  "(4, 6, 0, 0)": 1.0,
+  "(1, 3, 0, 1)": -1.0,
+  "(3, 6, 0, 0)": 1.0,
+  "(1, 6, 1, 0)": -1.0,
+  "(6, 7, 0, 0)": 1.0
+}</textarea>
+      <div class="legend">
+        <div class="badge blue"></div><div>0 → blue</div>
+        <div class="badge red"></div><div>1 → red</div>
+        <div class="badge green"></div><div>2 → green</div>
+        <div class="badge orange"></div><div>3 → orange</div>
+        <div class="badge purple"></div><div>4 → purple</div>
+        <div style="width:16px;height:16px;border:2px solid #aaa; transform: rotate(45deg);"></div>
+        <div>negative weight → diamond at midpoint</div>
+      </div>
+      <div class="hint">
+        Paste a dictionary or upload a JSON file with <code>{"graph": { "(u,v,c1,c2)": weight, ... }}</code>.<br/>
+        “Reposition” re-initializes only <em>non-fixed</em> vertices.
+      </div>
+    </aside>
+
+    <main class="canvas-wrap">
+      <svg id="svg" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice" aria-label="graph canvas">
+        <g id="edges"></g>
+        <g id="nodes"></g>
+      </svg>
+      <div class="toast" id="toast" style="display:none;"></div>
+    </main>
+  </div>
+
+<script>
+(function () {
+  // ===== Elements =====
+  const svg = document.getElementById('svg');
+  const gEdges = document.getElementById('edges');
+  const gNodes = document.getElementById('nodes');
+  const input = document.getElementById('edgeInput');
+  const toast = document.getElementById('toast');
+  const fileInput = document.getElementById('fileInput');
+
+  // ===== Colors =====
+  const colorMap = {
+    0: '#4ea1ff', // blue
+    1: '#ff6b6b', // red
+    2: '#6ede8a', // green
+    3: '#ffa94d', // orange
+    4: '#b28dff'  // purple
+  };
+  const NEUTRAL = '#9aa0a6'; // fallback stroke for unknown colors
+  const FIXED_FILL = (getComputedStyle(document.documentElement).getPropertyValue('--fixed-fill') || '#21314f').trim();
+
+  // ===== State =====
+  let nodes = []; // {id, x, y, vx, vy, fixed}
+  let edges = []; // {u, v, c1, c2, w}
+  let simRunning = false;
+  let dragging = null; // {node, dx, dy, moved}
+  let lastTick = performance.now();
+
+  // dynamic bounds (fit actual viewport)
+  let WIDTH = 1200, HEIGHT = 800;
+  const PADDING = 80;
+
+  // Physics params
+  const SPRING_LENGTH = 120, SPRING_K = 0.08, CHARGE = 14000;
+  const DAMPING = 0.85, MAX_SPEED = 12;
+  let temperature = 1.0;
+
+  // ===== Utils =====
+  function showToast(msg, ms = 1400) {
+    toast.textContent = msg; toast.style.display = 'block';
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(()=>toast.style.display='none', ms);
+  }
+
+  function getBoundsFromSVG() {
+    const r = svg.getBoundingClientRect();
+    WIDTH = Math.max(400, Math.floor(r.width));
+    HEIGHT = Math.max(300, Math.floor(r.height));
+  }
+  // initialize & keep current
+  getBoundsFromSVG();
+  window.addEventListener('resize', () => {
+    getBoundsFromSVG();
+  });
+
+  function line(x1,y1,x2,y2,stroke){
+    const el = document.createElementNS('http://www.w3.org/2000/svg','line');
+    el.setAttribute('x1',x1); el.setAttribute('y1',y1);
+    el.setAttribute('x2',x2); el.setAttribute('y2',y2);
+    el.setAttribute('stroke',stroke || NEUTRAL);
+    el.setAttribute('stroke-width',2.5);
+    el.setAttribute('stroke-linecap','round');
+    el.setAttribute('opacity','0.95');
+    return el;
+  }
+
+  // ===== Parsing =====
+  function parseGraphObject(text) {
+    let obj;
+    try { obj = JSON.parse(text); } catch { throw new Error('Invalid JSON in textarea.'); }
+    return parseEdgesFromMap(obj);
+  }
+
+  function parseEdgesFromMap(objMap) {
+    const E = [], Vset = new Set();
+    const valid = new Set([0,1,2,3,4]);
+    for (const [k, w] of Object.entries(objMap)) {
+      const m = k.match(/^\s*\(\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*\)\s*$/);
+      if (!m) throw new Error(`Bad edge key: ${k}`);
+      const u = +m[1], v = +m[2], rawc1 = +m[3], rawc2 = +m[4];
+      if (u === v) { console.warn(`Ignoring self-loop at ${k}`); continue; } // ignore self-loops
+
+      const c1 = valid.has(rawc1) ? rawc1 : -1; // soft fallback
+      const c2 = valid.has(rawc2) ? rawc2 : -1;
+
+      const wnum = Number(w);
+      if (!Number.isFinite(wnum)) throw new Error(`Weight not a number for key ${k}`);
+      E.push({ u, v, c1, c2, w: wnum });
+      Vset.add(u); Vset.add(v);
+    }
+    return { V: Array.from(Vset).sort((a,b)=>a-b), E };
+  }
+
+  // ===== Build / Layout =====
+  function randomPos() {
+    return {
+      x: PADDING + Math.random()*(WIDTH-2*PADDING),
+      y: PADDING + Math.random()*(HEIGHT-2*PADDING)
+    };
+  }
+  function buildNodes(ids, reuse=false) {
+    const prev = new Map(nodes.map(n=>[n.id,n]));
+    nodes = ids.map(id=>{
+      if (reuse && prev.has(id)) { const p=prev.get(id); return { id, x:p.x, y:p.y, vx:0, vy:0, fixed:!!p.fixed }; }
+      const r=randomPos(); return { id, x:r.x, y:r.y, vx:0, vy:0, fixed:false };
+    });
+  }
+  function buildEdges(E){ edges = E.map(e=>({...e})); }
+
+  // ===== Render =====
+  function draw() {
+    // fast O(1) lookups
+    const byId = new Map(nodes.map(n => [n.id, n]));
+
+    // edges
+    const fragE = document.createDocumentFragment();
+    for (const e of edges) {
+      const a = byId.get(e.u), b = byId.get(e.v);
+      if (!a || !b) continue;
+      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+
+      const col1 = colorMap[e.c1] || NEUTRAL;
+      const col2 = colorMap[e.c2] || NEUTRAL;
+
+      fragE.appendChild(line(a.x, a.y, mx, my, col1));
+      fragE.appendChild(line(mx, my, b.x, b.y, col2));
+
+      if (e.w < 0) {
+        const size=7;
+        const d=document.createElementNS('http://www.w3.org/2000/svg','rect');
+        d.setAttribute('x',mx-size/2); d.setAttribute('y',my-size/2);
+        d.setAttribute('width',size); d.setAttribute('height',size);
+        d.setAttribute('transform',`rotate(45 ${mx} ${my})`);
+        d.setAttribute('fill','none'); d.setAttribute('stroke','#cfcfcf');
+        d.setAttribute('stroke-width',1.8); d.setAttribute('opacity','0.9');
+        fragE.appendChild(d);
+      }
+    }
+    gEdges.replaceChildren(fragE);
+
+    // nodes
+    const fragN = document.createDocumentFragment();
+    for (const n of nodes) {
+      const circle=document.createElementNS('http://www.w3.org/2000/svg','circle');
+      circle.setAttribute('cx',n.x); circle.setAttribute('cy',n.y); circle.setAttribute('r',15);
+      circle.setAttribute('fill', n.fixed ? FIXED_FILL : '#0b0d12');
+      circle.setAttribute('stroke','#e5e7eb');
+      circle.setAttribute('stroke-width', n.fixed ? 3.5 : 2.2);
+      circle.setAttribute('opacity', n.fixed ? '1' : '0.95');
+      fragN.appendChild(circle);
+
+      if (n.fixed) {
+        const inner=document.createElementNS('http://www.w3.org/2000/svg','circle');
+        inner.setAttribute('cx',n.x); inner.setAttribute('cy',n.y); inner.setAttribute('r',10.5);
+        inner.setAttribute('fill','none'); inner.setAttribute('stroke','#7aa2f7'); inner.setAttribute('stroke-width',1.6); inner.setAttribute('opacity','0.9');
+        fragN.appendChild(inner);
+      }
+
+      const label=document.createElementNS('http://www.w3.org/2000/svg','text');
+      label.setAttribute('x',n.x); label.setAttribute('y',n.y+4);
+      label.setAttribute('text-anchor','middle'); label.setAttribute('font-size','12');
+      label.setAttribute('fill','#f5f7fa'); label.setAttribute('font-weight','600');
+      label.textContent=String(n.id);
+      fragN.appendChild(label);
+
+      const hit=document.createElementNS('http://www.w3.org/2000/svg','circle');
+      hit.setAttribute('cx',n.x); hit.setAttribute('cy',n.y); hit.setAttribute('r',18);
+      hit.setAttribute('fill','transparent'); hit.style.pointerEvents='all';
+
+      // smoother mobile: preventDefault on touchstart
+      hit.addEventListener('mousedown', ev=>startDrag(ev,n));
+      hit.addEventListener('touchstart', ev=>{ ev.preventDefault(); startDrag(ev,n); }, {passive:false});
+
+      fragN.appendChild(hit);
+    }
+    gNodes.replaceChildren(fragN);
+  }
+
+  // ===== Simulation =====
+  function tickLayout(dt) {
+    // repulsion
+    for (let i=0;i<nodes.length;i++){
+      const ni=nodes[i]; if (!ni.vx && !ni.vy) { ni.vx=0; ni.vy=0; }
+      for (let j=i+1;j<nodes.length;j++){
+        const nj=nodes[j];
+        let dx=ni.x-nj.x, dy=ni.y-nj.y, d2=dx*dx+dy*dy+0.01, d=Math.sqrt(d2);
+        let f=CHARGE/d2, fx=f*dx/d, fy=f*dy/d;
+        if (!ni.fixed){ ni.vx+=fx*dt; ni.vy+=fy*dt; }
+        if (!nj.fixed){ nj.vx-=fx*dt; nj.vy-=fy*dt; }
+      }
+    }
+    // springs
+    for (const e of edges){
+      // using Map per tick would be redundant; compute directly via array scan is fine
+      const a = nodes.find(n=>n.id===e.u), b = nodes.find(n=>n.id===e.v);
+      if(!a||!b) continue;
+      let dx=b.x-a.x, dy=b.y-a.y, d=Math.sqrt(dx*dx+dy*dy)||0.001;
+      let ext=d-SPRING_LENGTH, f=SPRING_K*ext, fx=f*dx/d, fy=f*dy/d;
+      if (!a.fixed){ a.vx+= fx*dt; a.vy+= fy*dt; }
+      if (!b.fixed){ b.vx+=-fx*dt; b.vy+=-fy*dt; }
+    }
+    // integrate
+    for (const n of nodes){
+      if (n.fixed){ n.vx=0; n.vy=0; continue; }
+      n.vx*=DAMPING; n.vy*=DAMPING;
+      n.x += Math.max(-MAX_SPEED, Math.min(MAX_SPEED, n.vx*temperature));
+      n.y += Math.max(-MAX_SPEED, Math.min(MAX_SPEED, n.vy*temperature));
+      // clamp to current bounds
+      n.x = Math.max(20, Math.min(WIDTH-20, n.x));
+      n.y = Math.max(20, Math.min(HEIGHT-20, n.y));
+    }
+    temperature = Math.max(0.02, temperature*0.985);
+  }
+
+  function animate(){
+    if (!simRunning) return;
+    const now=performance.now(), dt=Math.min(0.05,(now-lastTick)/1000); lastTick=now;
+    tickLayout(dt); draw();
+    const moving = nodes.some(n=>!n.fixed && (Math.abs(n.vx)+Math.abs(n.vy) > 0.04));
+    if (!moving && temperature<=0.03 && !dragging) { simRunning=false; return; }
+    requestAnimationFrame(animate);
+  }
+  function startSimulation(){ if (!simRunning){ simRunning=true; lastTick=performance.now(); requestAnimationFrame(animate); } }
+
+  // ===== Interaction (drag to fix, click fixed to release) =====
+  function svgPointFromEvent(ev){
+    const pt=svg.createSVGPoint(); const t=ev.touches&&ev.touches[0];
+    const x=t? t.clientX : ev.clientX, y=t? t.clientY : ev.clientY;
+    pt.x=x; pt.y=y; const ctm=svg.getScreenCTM().inverse(); return pt.matrixTransform(ctm);
+  }
+  function startDrag(ev,node){
+    const p=svgPointFromEvent(ev);
+    dragging={ node, dx: node.x-p.x, dy: node.y-p.y, moved:false };
+    temperature=Math.max(temperature,0.7); startSimulation();
+    window.addEventListener('mousemove', onDragMove);
+    window.addEventListener('mouseup', onDragEnd);
+    window.addEventListener('touchmove', onDragMove, {passive:false});
+    window.addEventListener('touchend', onDragEnd);
+  }
+  function onDragMove(ev){
+    if (!dragging) return;
+    ev.preventDefault(); // avoid scrolling on touch
+    const p=svgPointFromEvent(ev); const n=dragging.node;
+    const nx=p.x+dragging.dx, ny=p.y+dragging.dy;
+    dragging.moved = dragging.moved || (Math.hypot(n.x-nx, n.y-ny) > 2);
+    n.x=nx; n.y=ny; draw();
+  }
+  function onDragEnd(){
+    if (!dragging) return;
+    const n=dragging.node;
+    if (dragging.moved) {
+      n.fixed = true; n.vx = 0; n.vy = 0;
+      showToast(`Vertex ${n.id} fixed`);
+    } else {
+      if (n.fixed) {
+        n.fixed = false;
+        showToast(`Vertex ${n.id} released`);
+      }
+    }
+    dragging=null; startSimulation(); draw();
+    window.removeEventListener('mousemove', onDragMove);
+    window.removeEventListener('mouseup', onDragEnd);
+    window.removeEventListener('touchmove', onDragMove);
+    window.removeEventListener('touchend', onDragEnd);
+  }
+
+  // ===== Actions =====
+  function loadGraphFromInput(){
+    try{
+      const {V,E}=parseGraphObject(input.value);
+      buildNodes(V, /*reuse=*/ true);  // keep existing positions & pins where possible
+      buildEdges(E);
+      temperature=1.0; draw(); startSimulation();
+      showToast(`Loaded graph with ${V.length} vertices and ${E.length} edges.`);
+    }catch(e){ showToast(e.message,2500); console.error(e); }
+  }
+
+  function repositionNonFixed(){
+    for (const n of nodes) if (!n.fixed){ const p=randomPos(); n.x=p.x; n.y=p.y; n.vx=0; n.vy=0; }
+    temperature=1.0; startSimulation(); draw(); showToast('Repositioned non-fixed vertices.');
+  }
+
+  function clearFixedAll(){
+    for (const n of nodes) n.fixed=false;
+    temperature=Math.max(temperature,0.7); startSimulation(); draw(); showToast('All vertices are now unfixed.');
+  }
+
+  // File upload: expects {"graph": { "(u,v,c1,c2)": weight, ... }}
+  async function handleFileSelection(ev){
+    const file = ev.target.files && ev.target.files[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const json = JSON.parse(text);
+      if (!json || typeof json !== 'object' || !json.graph || typeof json.graph !== 'object') {
+        throw new Error("File must be JSON with a top-level 'graph' object.");
+      }
+      input.value = JSON.stringify(json.graph, null, 2); // visible & editable
+      const {V,E} = parseEdgesFromMap(json.graph);
+      buildNodes(V, /*reuse=*/ true);  // preserve existing nodes if IDs match
+      buildEdges(E);
+      temperature = 1.0; draw(); startSimulation();
+      showToast(`Loaded from file: ${V.length} vertices, ${E.length} edges.`);
+    } catch (e) {
+      console.error(e);
+      showToast(e.message || 'Failed to parse file.', 2600);
+    } finally {
+      ev.target.value = ''; // allow same file to be selected again
+    }
+  }
+
+  // Buttons / Inputs
+  document.getElementById('loadBtn').addEventListener('click', loadGraphFromInput);
+  document.getElementById('repositionBtn').addEventListener('click', repositionNonFixed);
+  document.getElementById('clearFixBtn').addEventListener('click', clearFixedAll);
+  fileInput.addEventListener('change', handleFileSelection);
+
+  // initial
+  loadGraphFromInput();
+})();
+</script>
+</body>
+</html>
