@@ -6,41 +6,52 @@
 <title>graph explore</title>
 <style>
   :root {
-    --bg: #0f1115;
-    --panel: #171923;
-    --text: #e6e6e6;
-    --muted: #9aa0a6;
-    --btn: #2b2f3a;
-    --btn-hover: #3a3f4d;
-    --fixed-fill: #21314f; /* fill for fixed nodes */
+    --bg: #0f1115; --panel: #171923; --text: #e6e6e6; --muted: #9aa0a6;
+    --btn: #2b2f3a; --btn-hover: #3a3f4d; --fixed-fill: #21314f;
+    --accent: #7aa2f7; --dim: 0.18; --sel-thick: 6;
   }
   html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; }
-  .wrap { display: grid; grid-template-columns: 360px 1fr; grid-template-rows: auto 1fr; gap: 10px; height: 100%; padding: 10px; box-sizing: border-box; }
+  .wrap { display: grid; grid-template-columns: 360px 1fr; grid-template-rows: auto 1fr auto; gap: 10px; height: 100%; padding: 10px; box-sizing: border-box; }
   header { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; background: var(--panel); padding: 10px 14px; border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.03); }
   header h1 { margin: 0; font-size: 16px; letter-spacing: .3px; color: #d7d7d7; }
   .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-  button, .file-btn {
-    background: var(--btn); color: var(--text);
-    border: 1px solid #272b35; border-radius: 10px; padding: 8px 10px;
-    cursor: pointer; transition: background .15s ease; display: inline-flex; align-items: center; gap: 8px;
-  }
+  button, .file-btn { background: var(--btn); color: var(--text); border: 1px solid #272b35; border-radius: 10px; padding: 8px 10px; cursor: pointer; transition: background .15s ease; display: inline-flex; align-items: center; gap: 8px; }
   button:hover, .file-btn:hover { background: var(--btn-hover); }
-  button:active { transform: translateY(1px); }
   input[type="file"] { display: none; }
+
   #sidebar { background: var(--panel); border-radius: 12px; padding: 10px; box-shadow: 0 4px 16px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.03); display: flex; flex-direction: column; gap: 10px; min-height: 0; }
-  textarea { width: 100%; min-height: 220px; resize: vertical; background: #0d0f14; color: var(--text); border: 1px solid #272b35; border-radius: 10px; padding: 10px; box-sizing: border-box; font-family: ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace; font-size: 12px; line-height: 1.35; }
+  textarea { width: 100%; min-height: 220px; resize: vertical; background: #0d0f14; color: var(--text); border: 1px solid #272b35; border-radius: 10px; padding: 10px; box-sizing: border-box; font-family: ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size: 12px; line-height: 1.35; }
   .hint { color: var(--muted); font-size: 12px; }
-  .legend { display: grid; grid-template-columns: auto 1fr; gap: 6px 10px; align-items: center; background: #11131a; padding: 8px 10px; border-radius: 10px; border: 1px solid #272b35; }
+
+  .legend { display: grid; grid-template-columns: auto auto; gap: 6px 10px; align-items: center; background: #11131a; padding: 8px 10px; border-radius: 10px; border: 1px solid #272b35; }
   .badge { width: 16px; height: 16px; border-radius: 50%; border: 2px solid #202533; box-sizing: border-box; }
-  .blue { background: #4ea1ff; } 
-  .red { background: #ff6b6b; } 
-  .green { background: #6ede8a; }
-  .orange { background: #ffa94d; }
-  .purple { background: #b28dff; }
+  .blue { background: #4ea1ff; } .red { background: #ff6b6b; } .green { background: #6ede8a; }
+  .orange { background: #ffa94d; } .purple { background: #b28dff; }
+  .num { color: #dcdcdc; font-weight: 600; font-size: 12px; }
+
   .canvas-wrap { position: relative; background: #0b0d12; border-radius: 12px; overflow: hidden; border: 1px solid #1e2230; }
   svg { width: 100%; height: 100%; display: block; }
+
   .toast { position: absolute; right: 10px; bottom: 10px; background: rgba(0,0,0,.6); border: 1px solid #2a2f3d; color: #d8dee9; padding: 6px 10px; border-radius: 8px; font-size: 12px; pointer-events: none; }
-  @media (max-width: 900px) { .wrap { grid-template-columns: 1fr; grid-template-rows: auto auto 1fr; } }
+
+  .footer { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--panel); padding: 10px 14px; border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.03); }
+  .counts { color: #d7d7d7; } .truncate { color: #ffb454; }
+
+  /* Vertical slider (top = "full") */
+  .match-slider { position: absolute; right: 6px; top: 10px; bottom: 10px; width: 50px; pointer-events: none; }
+  .slider-rail { position: absolute; right: 20px; top: 0; bottom: 0; width: 36px; display: flex; align-items: stretch; justify-content: center; }
+  .slider-rail input[type="range"] { pointer-events: auto; width: 36px; height: 100%; background: transparent; writing-mode: bt-lr; -webkit-appearance: slider-vertical; transform: scaleY(-1); }
+  .slider-rail input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; border-radius: 6px; background: var(--accent); border: 1px solid #2a2f3d; }
+  .slider-rail input[type="range"]::-moz-range-thumb { width: 20px; height: 20px; border: 0; border-radius: 6px; background: var(--accent); }
+
+  .ticks { position: absolute; right: 35px; top: 10px; bottom: 10px; width: 10px; pointer-events: none; }
+  .tick { position: absolute; left: 3px; width: 4px; height: 4px; border-radius: 50%; background: rgba(220,220,220,0.28); transform: translateY(-2px); }
+  .match-label { position: absolute; right: 56px; width: 36px; text-align: right; font-size: 12px; color: #cfd8e3; background: rgba(0,0,0,0.35); border: 1px solid #2a2f3d; padding: 2px 6px; border-radius: 8px; pointer-events: none; transform: translateY(-10px); }
+
+  /* Interactivity */
+  #edges { pointer-events: all; }
+  .edge { pointer-events: stroke; cursor: pointer; }
+  .mid-diamond { pointer-events: none; }
 </style>
 </head>
 <body>
@@ -48,14 +59,15 @@
     <header>
       <h1>graph explore</h1>
       <div class="controls">
-        <button id="loadBtn">Load Graph</button>
-        <button id="repositionBtn">Reposition</button>
-        <button id="clearFixBtn">Clear Fixed</button>
-        <label class="file-btn" title="Upload a JSON file with a top-level 'graph' key">
+        <button id="loadBtn" title="Parse graph from the textarea">Load Graph</button>
+        <button id="repositionBtn" title="Reinitialize non-fixed vertices">Reposition</button>
+        <button id="clearFixBtn" title="Release all fixed vertices">Clear Fixed</button>
+        <button id="clearSelBtn" title="Unselect all edges">Clear Edges</button>
+        <label class="file-btn" title="Upload a JSON file containing { &quot;graph&quot;: { &quot;(u,v,c1,c2)&quot;: weight, ... } }">
           <input type="file" id="fileInput" accept=".json,application/json" />
           Upload JSON
         </label>
-        <span class="hint">Drag to move (drop = <strong>fixed</strong>). Click a fixed node to release.</span>
+        <span class="hint">Drag a vertex to fix it; click a fixed one to release. Click an edge to filter matchings by that exact edge.</span>
       </div>
     </header>
 
@@ -77,103 +89,144 @@
   "(1, 6, 1, 0)": -1.0,
   "(6, 7, 0, 0)": 1.0
 }</textarea>
-      <div class="legend">
-        <div class="badge blue"></div><div>0 → blue</div>
-        <div class="badge red"></div><div>1 → red</div>
-        <div class="badge green"></div><div>2 → green</div>
-        <div class="badge orange"></div><div>3 → orange</div>
-        <div class="badge purple"></div><div>4 → purple</div>
+      <div class="legend" aria-label="Color legend">
+        <div class="badge blue"></div><div class="num">0</div>
+        <div class="badge red"></div><div class="num">1</div>
+        <div class="badge green"></div><div class="num">2</div>
+        <div class="badge orange"></div><div class="num">3</div>
+        <div class="badge purple"></div><div class="num">4</div>
         <div style="width:16px;height:16px;border:2px solid #aaa; transform: rotate(45deg);"></div>
-        <div>negative weight → diamond at midpoint</div>
+        <div class="num">neg. weight</div>
       </div>
       <div class="hint">
-        Paste a dictionary or upload a JSON file with <code>{"graph": { "(u,v,c1,c2)": weight, ... }}</code>.<br/>
-        “Reposition” re-initializes only <em>non-fixed</em> vertices.
+        Input format: <code>{"(u, v, c1, c2)": weight, ...}</code><br/>
+        Or upload a JSON file with a top-level <code>"graph"</code> key.
       </div>
     </aside>
 
     <main class="canvas-wrap">
       <svg id="svg" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice" aria-label="graph canvas">
+        <!-- Glow for selected edges -->
+        <defs>
+          <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="blur"/>
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
         <g id="edges"></g>
         <g id="nodes"></g>
       </svg>
+
+      <!-- Matching slider -->
+      <div class="match-slider">
+        <div class="ticks" id="ticks"></div>
+        <div class="slider-rail">
+          <input id="matchSlider" type="range" orient="vertical" min="0" max="0" step="1" value="0" title="Top = full graph; >0 steps through perfect matchings" />
+        </div>
+        <div class="match-label" id="matchLabel">full</div>
+      </div>
+
       <div class="toast" id="toast" style="display:none;"></div>
     </main>
+
+    <div class="footer">
+      <div class="counts" id="counts">there are 0 perfect matchings for this graph</div>
+      <div class="hint" id="truncateNote" style="display:none;">(<span class="truncate">truncated</span>)</div>
+    </div>
   </div>
 
 <script>
-(function () {
-  // ===== Elements =====
+(() => {
+  /* ---------- Elements ---------- */
   const svg = document.getElementById('svg');
   const gEdges = document.getElementById('edges');
   const gNodes = document.getElementById('nodes');
   const input = document.getElementById('edgeInput');
   const toast = document.getElementById('toast');
   const fileInput = document.getElementById('fileInput');
+  const countsEl = document.getElementById('counts');
+  const truncateNote = document.getElementById('truncateNote');
+  const matchSlider = document.getElementById('matchSlider');
+  const ticksEl = document.getElementById('ticks');
+  const matchLabel = document.getElementById('matchLabel');
 
-  // ===== Colors =====
-  const colorMap = {
-    0: '#4ea1ff', // blue
-    1: '#ff6b6b', // red
-    2: '#6ede8a', // green
-    3: '#ffa94d', // orange
-    4: '#b28dff'  // purple
-  };
-  const NEUTRAL = '#9aa0a6'; // fallback stroke for unknown colors
-  const FIXED_FILL = (getComputedStyle(document.documentElement).getPropertyValue('--fixed-fill') || '#21314f').trim();
+  /* ---------- Colors & constants ---------- */
+  const colorMap = { 0:'#4ea1ff', 1:'#ff6b6b', 2:'#6ede8a', 3:'#ffa94d', 4:'#b28dff' };
+  const NEUTRAL = '#9aa0a6';
+  const FIXED_FILL = getComputedStyle(document.documentElement).getPropertyValue('--fixed-fill').trim() || '#21314f';
+  const DIM_OPACITY = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--dim')) || 0.18;
+  const SEL_THICK = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sel-thick')) || 6;
 
-  // ===== State =====
-  let nodes = []; // {id, x, y, vx, vy, fixed}
-  let edges = []; // {u, v, c1, c2, w}
-  let simRunning = false;
-  let dragging = null; // {node, dx, dy, moved}
-  let lastTick = performance.now();
+  /* ---------- State ---------- */
+  let nodes = [];          // {id, x, y, vx, vy, fixed}
+  let edges = [];          // {id, u, v, c1, c2, w, pk, ord, ordCount}
+  let pairToEdges = new Map(); // pk -> [edgeIds]
+  let uniquePairs = new Set();
+  let selectedEdges = new Set(); // per-edge selection
 
-  // dynamic bounds (fit actual viewport)
-  let WIDTH = 1200, HEIGHT = 800;
-  const PADDING = 80;
+  // Matching instances (edge-level, multiplicity-aware)
+  let allInstances = [];     // Array<Array<edgeId>>
+  let filteredIndices = [];  // Array<Number> (1-based index into allInstances)
+  let truncated = false;
+  const MATCH_LIMIT = 50000; // safety cap
 
-  // Physics params
+  // Physics
+  let WIDTH = 1200, HEIGHT = 800; const PADDING = 80;
   const SPRING_LENGTH = 120, SPRING_K = 0.08, CHARGE = 14000;
-  const DAMPING = 0.85, MAX_SPEED = 12;
-  let temperature = 1.0;
+  const DAMPING = 0.85, MAX_SPEED = 12; let temperature = 1.0;
+  let simRunning = false, dragging = null, lastTick = performance.now();
 
-  // ===== Utils =====
+  /* ---------- Helpers ---------- */
   function showToast(msg, ms = 1400) {
     toast.textContent = msg; toast.style.display = 'block';
-    clearTimeout(showToast._t);
-    showToast._t = setTimeout(()=>toast.style.display='none', ms);
+    clearTimeout(showToast._t); showToast._t = setTimeout(()=>toast.style.display='none', ms);
   }
-
   function getBoundsFromSVG() {
     const r = svg.getBoundingClientRect();
     WIDTH = Math.max(400, Math.floor(r.width));
     HEIGHT = Math.max(300, Math.floor(r.height));
   }
-  // initialize & keep current
-  getBoundsFromSVG();
-  window.addEventListener('resize', () => {
-    getBoundsFromSVG();
-  });
+  getBoundsFromSVG(); window.addEventListener('resize', getBoundsFromSVG);
 
-  function line(x1,y1,x2,y2,stroke){
+  function pairKey(a,b){ return (a<b) ? `${a},${b}` : `${b},${a}`; }
+  function randomPos() {
+    return { x: PADDING + Math.random()*(WIDTH-2*PADDING), y: PADDING + Math.random()*(HEIGHT-2*PADDING) };
+  }
+
+  // SVG helpers
+  function lineEl(x1,y1,x2,y2,stroke,width,opacity,eid,glow=false){
     const el = document.createElementNS('http://www.w3.org/2000/svg','line');
     el.setAttribute('x1',x1); el.setAttribute('y1',y1);
     el.setAttribute('x2',x2); el.setAttribute('y2',y2);
     el.setAttribute('stroke',stroke || NEUTRAL);
-    el.setAttribute('stroke-width',2.5);
+    el.setAttribute('stroke-width',width);
     el.setAttribute('stroke-linecap','round');
-    el.setAttribute('opacity','0.95');
+    el.setAttribute('opacity',String(opacity));
+    el.setAttribute('class','edge');
+    el.setAttribute('fill','none');
+    el.setAttribute('data-eid', String(eid));
+    if (glow) el.setAttribute('filter','url(#softGlow)');
+    return el;
+  }
+  function quadPathEl(p0,p1,p2,stroke,width,opacity,eid,glow=false){
+    const el = document.createElementNS('http://www.w3.org/2000/svg','path');
+    el.setAttribute('d', `M ${p0.x} ${p0.y} Q ${p1.x} ${p1.y} ${p2.x} ${p2.y}`);
+    el.setAttribute('stroke', stroke || NEUTRAL);
+    el.setAttribute('stroke-width', width);
+    el.setAttribute('stroke-linecap','round');
+    el.setAttribute('fill','none');
+    el.setAttribute('opacity', String(opacity));
+    el.setAttribute('class','edge');
+    el.setAttribute('data-eid', String(eid));
+    if (glow) el.setAttribute('filter','url(#softGlow)');
     return el;
   }
 
-  // ===== Parsing =====
+  /* ---------- Parsing ---------- */
   function parseGraphObject(text) {
-    let obj;
-    try { obj = JSON.parse(text); } catch { throw new Error('Invalid JSON in textarea.'); }
+    let obj; try { obj = JSON.parse(text); } catch { throw new Error('Invalid JSON in textarea.'); }
     return parseEdgesFromMap(obj);
   }
-
   function parseEdgesFromMap(objMap) {
     const E = [], Vset = new Set();
     const valid = new Set([0,1,2,3,4]);
@@ -181,11 +234,9 @@
       const m = k.match(/^\s*\(\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*\)\s*$/);
       if (!m) throw new Error(`Bad edge key: ${k}`);
       const u = +m[1], v = +m[2], rawc1 = +m[3], rawc2 = +m[4];
-      if (u === v) { console.warn(`Ignoring self-loop at ${k}`); continue; } // ignore self-loops
-
-      const c1 = valid.has(rawc1) ? rawc1 : -1; // soft fallback
+      if (u === v) continue; // ignore self-loops
+      const c1 = valid.has(rawc1) ? rawc1 : -1;
       const c2 = valid.has(rawc2) ? rawc2 : -1;
-
       const wnum = Number(w);
       if (!Number.isFinite(wnum)) throw new Error(`Weight not a number for key ${k}`);
       E.push({ u, v, c1, c2, w: wnum });
@@ -194,49 +245,197 @@
     return { V: Array.from(Vset).sort((a,b)=>a-b), E };
   }
 
-  // ===== Build / Layout =====
-  function randomPos() {
-    return {
-      x: PADDING + Math.random()*(WIDTH-2*PADDING),
-      y: PADDING + Math.random()*(HEIGHT-2*PADDING)
-    };
+  /* ---------- Build graph with multi-edge bookkeeping ---------- */
+  function buildEdges(E){
+    edges = E.map((e,i) => ({ id: i, ...e, pk: pairKey(e.u,e.v), ord: 0, ordCount: 1 }));
+    pairToEdges = new Map();
+    uniquePairs = new Set();
+    for (const ed of edges) {
+      uniquePairs.add(ed.pk);
+      if (!pairToEdges.has(ed.pk)) pairToEdges.set(ed.pk, []);
+      pairToEdges.get(ed.pk).push(ed.id);
+    }
+    for (const [_, list] of pairToEdges.entries()) {
+      list.forEach((eid, j) => { edges[eid].ord = j; edges[eid].ordCount = list.length; });
+    }
   }
-  function buildNodes(ids, reuse=false) {
+  function buildNodes(ids, reuse=false){
     const prev = new Map(nodes.map(n=>[n.id,n]));
     nodes = ids.map(id=>{
       if (reuse && prev.has(id)) { const p=prev.get(id); return { id, x:p.x, y:p.y, vx:0, vy:0, fixed:!!p.fixed }; }
       const r=randomPos(); return { id, x:r.x, y:r.y, vx:0, vy:0, fixed:false };
     });
   }
-  function buildEdges(E){ edges = E.map(e=>({...e})); }
 
-  // ===== Render =====
+  /* ---------- Perfect matchings (edge-level, multiplicity-aware) ---------- */
+  function computePairings(vertices, pairSet) {
+    const n = vertices.length; if (n % 2) return { pairings: [], truncated: false };
+    const idxOf = new Map(vertices.map((v,i)=>[v,i])); const invIdx = vertices;
+    const adj = new Array(n).fill(0);
+    for (const pk of pairSet) {
+      const [aS,bS] = pk.split(','); const a=+aS, b=+bS;
+      if (!idxOf.has(a) || !idxOf.has(b)) continue;
+      const i=idxOf.get(a), j=idxOf.get(b);
+      adj[i] |= (1<<j); adj[j] |= (1<<i);
+    }
+    for (let i=0;i<n;i++){ if ((adj[i] & ((1<<n)-1)) === 0) return { pairings: [], truncated: false }; }
+    const results=[]; const ALL=(1<<n)-1;
+    (function search(mask, cur){
+      if (results.length >= MATCH_LIMIT) return;
+      if (!mask) { results.push(cur.slice()); return; }
+      let i=0; while(((mask>>i)&1)===0) i++;
+      const rest = mask & ~(1<<i), options = adj[i] & rest;
+      for (let j=i+1;j<n;j++){
+        if (((options>>j)&1)===0) continue;
+        cur.push(pairKey(invIdx[i],invIdx[j]));
+        search(rest & ~(1<<j), cur);
+        cur.pop();
+        if (results.length >= MATCH_LIMIT) return;
+      }
+    })(ALL, []);
+    return { pairings: results, truncated: results.length >= MATCH_LIMIT };
+  }
+  function expandPairingsToInstances(pairings) {
+    const instances = []; let cut=false;
+    for (const pairing of pairings) {
+      const lists = pairing.map(pk => pairToEdges.get(pk) || []);
+      if (lists.some(arr => arr.length===0)) continue;
+      const cur=[];
+      (function rec(i){
+        if (cut) return;
+        if (i===lists.length) {
+          instances.push(cur.slice());
+          if (instances.length >= MATCH_LIMIT) cut=true;
+          return;
+        }
+        for (const eid of lists[i]) {
+          cur.push(eid); rec(i+1); cur.pop();
+          if (cut) return;
+        }
+      })(0);
+      if (cut) break;
+    }
+    truncated = cut;
+    return instances;
+  }
+
+  /* ---------- UI counters / slider ---------- */
+  function updateCounts() {
+    const N = allInstances.length, M = filteredIndices.length, sel = selectedEdges.size;
+    const base = `there ${N===1?'is':'are'} ${N} perfect matching${N===1?'':'s'} for this graph`;
+    countsEl.textContent = base + (sel ? `, ${M} perfect matching${M===1?'':'s'} with the selected edges` : '');
+    truncateNote.style.display = truncated ? '' : 'none';
+  }
+  function renderTicks(nFiltered) {
+    ticksEl.innerHTML = '';
+    const total = nFiltered + 1; // include "full"
+    if (total <= 1) return;
+    for (let i=0;i<total;i++){
+      const t = document.createElement('div'); t.className='tick';
+      t.style.top = `${(i/(total-1))*100}%`; ticksEl.appendChild(t);
+    }
+  }
+  function updateMatchLabel() {
+    const rail = document.querySelector('.slider-rail');
+    const h = rail.getBoundingClientRect().height;
+    const val = +matchSlider.value, max = Math.max(0, +matchSlider.max);
+    let label='full', frac=0;
+    if (val>0 && max>0) { label = `#${filteredIndices[val-1]}`; frac = (val / max); }
+    matchLabel.textContent = label;
+    matchLabel.style.top = `${frac*h}px`;
+  }
+  function applyMatchingSliderLimits() {
+    matchSlider.min = 0;
+    matchSlider.max = filteredIndices.length;
+    if (+matchSlider.value > +matchSlider.max) matchSlider.value = 0;
+    renderTicks(filteredIndices.length);
+    updateMatchLabel();
+  }
+  function refilterMatchings() {
+    filteredIndices = [];
+    if (selectedEdges.size === 0) {
+      for (let i=1;i<=allInstances.length;i++) filteredIndices.push(i);
+    } else {
+      for (let i=0;i<allInstances.length;i++){
+        const eids = allInstances[i];
+        let ok = true;
+        for (const eid of selectedEdges) { if (!eids.includes(eid)) { ok=false; break; } }
+        if (ok) filteredIndices.push(i+1);
+      }
+    }
+    applyMatchingSliderLimits();
+    updateCounts();
+  }
+
+  /* ---------- Multi-edge geometry (quadratic curves, split at t=0.5) ---------- */
+  function curvedSplit(a,b,ord,ordCount) {
+    const dx=b.x-a.x, dy=b.y-a.y, dist=Math.hypot(dx,dy)||0.001;
+    let factor; // symmetric offsets
+    if (ordCount%2) { factor = ord - (ordCount-1)/2; }
+    else { factor = ord - (ordCount/2 - 0.5); }
+    const ux = -dy/dist, uy = dx/dist;
+    const amp = Math.min(60, Math.max(18, 0.22*dist));
+    const mx=(a.x+b.x)/2, my=(a.y+b.y)/2;
+    const c = { x: mx + ux*amp*factor, y: my + uy*amp*factor };
+    const A = { x:(a.x+c.x)/2, y:(a.y+c.y)/2 };
+    const B = { x:(c.x+b.x)/2, y:(c.y+b.y)/2 };
+    const M = { x:(A.x+B.x)/2, y:(A.y+B.y)/2 };
+    return { p0:a, p1:c, p2:b, A, B, M };
+  }
+
+  /* ---------- Render ---------- */
   function draw() {
-    // fast O(1) lookups
     const byId = new Map(nodes.map(n => [n.id, n]));
+    const pos = Number(matchSlider.value);
+    const showingMatching = (pos > 0 && pos <= filteredIndices.length);
+    const activeEdgeIds = new Set(showingMatching ? allInstances[ filteredIndices[pos-1] - 1 ] : []);
 
     // edges
     const fragE = document.createDocumentFragment();
     for (const e of edges) {
-      const a = byId.get(e.u), b = byId.get(e.v);
-      if (!a || !b) continue;
-      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      const a = byId.get(e.u), b = byId.get(e.v); if (!a||!b) continue;
+      const isSelected = selectedEdges.has(e.id);
+      const isInMatching = activeEdgeIds.has(e.id);
+      const stroke1 = colorMap[e.c1] || NEUTRAL;
+      const stroke2 = colorMap[e.c2] || NEUTRAL;
+      const opacity = showingMatching ? (isInMatching ? 0.98 : DIM_OPACITY) : 0.95;
+      const width = isSelected ? SEL_THICK : 2.5;
+      const glow = isSelected;
 
-      const col1 = colorMap[e.c1] || NEUTRAL;
-      const col2 = colorMap[e.c2] || NEUTRAL;
-
-      fragE.appendChild(line(a.x, a.y, mx, my, col1));
-      fragE.appendChild(line(mx, my, b.x, b.y, col2));
-
-      if (e.w < 0) {
-        const size=7;
-        const d=document.createElementNS('http://www.w3.org/2000/svg','rect');
-        d.setAttribute('x',mx-size/2); d.setAttribute('y',my-size/2);
-        d.setAttribute('width',size); d.setAttribute('height',size);
-        d.setAttribute('transform',`rotate(45 ${mx} ${my})`);
-        d.setAttribute('fill','none'); d.setAttribute('stroke','#cfcfcf');
-        d.setAttribute('stroke-width',1.8); d.setAttribute('opacity','0.9');
-        fragE.appendChild(d);
+      if (e.ordCount > 1) {
+        const geom = curvedSplit({x:a.x,y:a.y},{x:b.x,y:b.y}, e.ord, e.ordCount);
+        if (glow) {
+          fragE.appendChild(quadPathEl(geom.p0, geom.A, geom.M, stroke1, width+6, 0.35, e.id, true));
+          fragE.appendChild(quadPathEl(geom.M, geom.B, geom.p2, stroke2, width+6, 0.35, e.id, true));
+        }
+        fragE.appendChild(quadPathEl(geom.p0, geom.A, geom.M, stroke1, width, opacity, e.id));
+        fragE.appendChild(quadPathEl(geom.M, geom.B, geom.p2, stroke2, width, opacity, e.id));
+        if (e.w < 0) {
+          const d=document.createElementNS('http://www.w3.org/2000/svg','rect');
+          d.setAttribute('x',geom.M.x-3.5); d.setAttribute('y',geom.M.y-3.5);
+          d.setAttribute('width',7); d.setAttribute('height',7);
+          d.setAttribute('transform',`rotate(45 ${geom.M.x} ${geom.M.y})`);
+          d.setAttribute('fill','none'); d.setAttribute('stroke','#cfcfcf');
+          d.setAttribute('stroke-width',1.8); d.setAttribute('opacity',String(opacity));
+          d.setAttribute('class','mid-diamond'); fragE.appendChild(d);
+        }
+      } else {
+        const mx=(a.x+b.x)/2, my=(a.y+b.y)/2;
+        if (glow) {
+          fragE.appendChild(lineEl(a.x,a.y,mx,my,stroke1,width+6,0.35,e.id,true));
+          fragE.appendChild(lineEl(mx,my,b.x,b.y,stroke2,width+6,0.35,e.id,true));
+        }
+        fragE.appendChild(lineEl(a.x,a.y,mx,my,stroke1,width,opacity,e.id));
+        fragE.appendChild(lineEl(mx,my,b.x,b.y,stroke2,width,opacity,e.id));
+        if (e.w < 0) {
+          const d=document.createElementNS('http://www.w3.org/2000/svg','rect');
+          d.setAttribute('x',mx-3.5); d.setAttribute('y',my-3.5);
+          d.setAttribute('width',7); d.setAttribute('height',7);
+          d.setAttribute('transform',`rotate(45 ${mx} ${my})`);
+          d.setAttribute('fill','none'); d.setAttribute('stroke','#cfcfcf');
+          d.setAttribute('stroke-width',1.8); d.setAttribute('opacity',String(opacity));
+          d.setAttribute('class','mid-diamond'); fragE.appendChild(d);
+        }
       }
     }
     gEdges.replaceChildren(fragE);
@@ -247,10 +446,8 @@
       const circle=document.createElementNS('http://www.w3.org/2000/svg','circle');
       circle.setAttribute('cx',n.x); circle.setAttribute('cy',n.y); circle.setAttribute('r',15);
       circle.setAttribute('fill', n.fixed ? FIXED_FILL : '#0b0d12');
-      circle.setAttribute('stroke','#e5e7eb');
-      circle.setAttribute('stroke-width', n.fixed ? 3.5 : 2.2);
-      circle.setAttribute('opacity', n.fixed ? '1' : '0.95');
-      fragN.appendChild(circle);
+      circle.setAttribute('stroke','#e5e7eb'); circle.setAttribute('stroke-width', n.fixed ? 3.5 : 2.2);
+      circle.setAttribute('opacity', n.fixed ? '1' : '0.95'); fragN.appendChild(circle);
 
       if (n.fixed) {
         const inner=document.createElementNS('http://www.w3.org/2000/svg','circle');
@@ -260,30 +457,46 @@
       }
 
       const label=document.createElementNS('http://www.w3.org/2000/svg','text');
-      label.setAttribute('x',n.x); label.setAttribute('y',n.y+4);
-      label.setAttribute('text-anchor','middle'); label.setAttribute('font-size','12');
-      label.setAttribute('fill','#f5f7fa'); label.setAttribute('font-weight','600');
-      label.textContent=String(n.id);
-      fragN.appendChild(label);
+      label.setAttribute('x',n.x); label.setAttribute('y',n.y+4); label.setAttribute('text-anchor','middle');
+      label.setAttribute('font-size','12'); label.setAttribute('fill','#f5f7fa'); label.setAttribute('font-weight','600');
+      label.textContent=String(n.id); fragN.appendChild(label);
 
       const hit=document.createElementNS('http://www.w3.org/2000/svg','circle');
       hit.setAttribute('cx',n.x); hit.setAttribute('cy',n.y); hit.setAttribute('r',18);
       hit.setAttribute('fill','transparent'); hit.style.pointerEvents='all';
-
-      // smoother mobile: preventDefault on touchstart
       hit.addEventListener('mousedown', ev=>startDrag(ev,n));
       hit.addEventListener('touchstart', ev=>{ ev.preventDefault(); startDrag(ev,n); }, {passive:false});
-
       fragN.appendChild(hit);
     }
     gNodes.replaceChildren(fragN);
+
+    updateMatchLabel();
   }
 
-  // ===== Simulation =====
+  /* ---------- Edge selection (delegated, robust across browsers) ---------- */
+  function findEdgeElementWithEid(ev) {
+    const path = (typeof ev.composedPath === 'function') ? ev.composedPath() : (function(){
+      const arr = []; let n = ev.target; while(n){ arr.push(n); n = n.parentNode; } return arr;
+    })();
+    for (const el of path) { if (el && el.getAttribute && el.getAttribute('data-eid') != null) return el; }
+    return null;
+  }
+  function onEdgePointer(ev){
+    const el = findEdgeElementWithEid(ev); if (!el) return;
+    const eid = parseInt(el.getAttribute('data-eid'), 10); if (!Number.isFinite(eid)) return;
+    if (selectedEdges.has(eid)) selectedEdges.delete(eid); else selectedEdges.add(eid);
+    refilterMatchings();
+    if (+matchSlider.value > +matchSlider.max) matchSlider.value = 0;
+    draw();
+  }
+  gEdges.addEventListener('pointerdown', onEdgePointer, {passive:true});
+  gEdges.addEventListener('mousedown', onEdgePointer, {passive:true}); // fallback
+
+  /* ---------- Simulation ---------- */
   function tickLayout(dt) {
     // repulsion
     for (let i=0;i<nodes.length;i++){
-      const ni=nodes[i]; if (!ni.vx && !ni.vy) { ni.vx=0; ni.vy=0; }
+      const ni=nodes[i];
       for (let j=i+1;j<nodes.length;j++){
         const nj=nodes[j];
         let dx=ni.x-nj.x, dy=ni.y-nj.y, d2=dx*dx+dy*dy+0.01, d=Math.sqrt(d2);
@@ -294,9 +507,7 @@
     }
     // springs
     for (const e of edges){
-      // using Map per tick would be redundant; compute directly via array scan is fine
-      const a = nodes.find(n=>n.id===e.u), b = nodes.find(n=>n.id===e.v);
-      if(!a||!b) continue;
+      const a = nodes.find(n=>n.id===e.u), b = nodes.find(n=>n.id===e.v); if(!a||!b) continue;
       let dx=b.x-a.x, dy=b.y-a.y, d=Math.sqrt(dx*dx+dy*dy)||0.001;
       let ext=d-SPRING_LENGTH, f=SPRING_K*ext, fx=f*dx/d, fy=f*dy/d;
       if (!a.fixed){ a.vx+= fx*dt; a.vy+= fy*dt; }
@@ -308,13 +519,11 @@
       n.vx*=DAMPING; n.vy*=DAMPING;
       n.x += Math.max(-MAX_SPEED, Math.min(MAX_SPEED, n.vx*temperature));
       n.y += Math.max(-MAX_SPEED, Math.min(MAX_SPEED, n.vy*temperature));
-      // clamp to current bounds
       n.x = Math.max(20, Math.min(WIDTH-20, n.x));
       n.y = Math.max(20, Math.min(HEIGHT-20, n.y));
     }
     temperature = Math.max(0.02, temperature*0.985);
   }
-
   function animate(){
     if (!simRunning) return;
     const now=performance.now(), dt=Math.min(0.05,(now-lastTick)/1000); lastTick=now;
@@ -325,11 +534,11 @@
   }
   function startSimulation(){ if (!simRunning){ simRunning=true; lastTick=performance.now(); requestAnimationFrame(animate); } }
 
-  // ===== Interaction (drag to fix, click fixed to release) =====
+  /* ---------- Node drag / fix / release ---------- */
   function svgPointFromEvent(ev){
     const pt=svg.createSVGPoint(); const t=ev.touches&&ev.touches[0];
-    const x=t? t.clientX : ev.clientX, y=t? t.clientY : ev.clientY;
-    pt.x=x; pt.y=y; const ctm=svg.getScreenCTM().inverse(); return pt.matrixTransform(ctm);
+    pt.x = t? t.clientX : ev.clientX; pt.y = t? t.clientY : ev.clientY;
+    const ctm = svg.getScreenCTM().inverse(); return pt.matrixTransform(ctm);
   }
   function startDrag(ev,node){
     const p=svgPointFromEvent(ev);
@@ -341,25 +550,16 @@
     window.addEventListener('touchend', onDragEnd);
   }
   function onDragMove(ev){
-    if (!dragging) return;
-    ev.preventDefault(); // avoid scrolling on touch
+    if (!dragging) return; ev.preventDefault();
     const p=svgPointFromEvent(ev); const n=dragging.node;
     const nx=p.x+dragging.dx, ny=p.y+dragging.dy;
     dragging.moved = dragging.moved || (Math.hypot(n.x-nx, n.y-ny) > 2);
     n.x=nx; n.y=ny; draw();
   }
   function onDragEnd(){
-    if (!dragging) return;
-    const n=dragging.node;
-    if (dragging.moved) {
-      n.fixed = true; n.vx = 0; n.vy = 0;
-      showToast(`Vertex ${n.id} fixed`);
-    } else {
-      if (n.fixed) {
-        n.fixed = false;
-        showToast(`Vertex ${n.id} released`);
-      }
-    }
+    if (!dragging) return; const n=dragging.node;
+    if (dragging.moved) { n.fixed=true; n.vx=0; n.vy=0; showToast(`Vertex ${n.id} fixed`); }
+    else if (n.fixed) { n.fixed=false; showToast(`Vertex ${n.id} released`); }
     dragging=null; startSimulation(); draw();
     window.removeEventListener('mousemove', onDragMove);
     window.removeEventListener('mouseup', onDragEnd);
@@ -367,58 +567,78 @@
     window.removeEventListener('touchend', onDragEnd);
   }
 
-  // ===== Actions =====
+  /* ---------- Actions ---------- */
   function loadGraphFromInput(){
     try{
       const {V,E}=parseGraphObject(input.value);
-      buildNodes(V, /*reuse=*/ true);  // keep existing positions & pins where possible
-      buildEdges(E);
+      buildNodes(V, true); buildEdges(E);
       temperature=1.0; draw(); startSimulation();
-      showToast(`Loaded graph with ${V.length} vertices and ${E.length} edges.`);
-    }catch(e){ showToast(e.message,2500); console.error(e); }
+
+      const { pairings } = computePairings(V, uniquePairs);
+      allInstances = expandPairingsToInstances(pairings);
+      selectedEdges.clear();
+
+      // initial filtered list: all instances
+      filteredIndices = []; for (let i=1;i<=allInstances.length;i++) filteredIndices.push(i);
+      matchSlider.value = 0;
+      applyMatchingSliderLimits();
+      updateCounts(); // show correct counts immediately
+      draw();
+      showToast(`Loaded graph: ${V.length} vertices, ${E.length} edges. Found ${allInstances.length}${truncated?' (truncated)':''} perfect matchings.`);
+    }catch(e){ showToast(e.message || 'Failed to load graph.', 2400); }
+  }
+
+  async function handleFileSelection(ev){
+    const file = ev.target.files && ev.target.files[0]; if (!file) return;
+    try {
+      const text = await file.text(); const json = JSON.parse(text);
+      if (!json || typeof json !== 'object' || !json.graph || typeof json.graph !== 'object')
+        throw new Error("File must be JSON with a top-level 'graph' object.");
+      input.value = JSON.stringify(json.graph, null, 2);
+      const {V,E} = parseEdgesFromMap(json.graph);
+      buildNodes(V, true); buildEdges(E);
+      temperature=1.0; draw(); startSimulation();
+
+      const { pairings } = computePairings(V, uniquePairs);
+      allInstances = expandPairingsToInstances(pairings);
+      selectedEdges.clear();
+
+      filteredIndices = []; for (let i=1;i<=allInstances.length;i++) filteredIndices.push(i);
+      matchSlider.value = 0;
+      applyMatchingSliderLimits();
+      updateCounts();
+      draw();
+      showToast(`Loaded from file: ${V.length} vertices, ${E.length} edges. Found ${allInstances.length}${truncated?' (truncated)':''} perfect matchings.`);
+    } catch (e) { showToast(e.message || 'Failed to parse file.', 2400); }
+    finally { ev.target.value = ''; }
   }
 
   function repositionNonFixed(){
     for (const n of nodes) if (!n.fixed){ const p=randomPos(); n.x=p.x; n.y=p.y; n.vx=0; n.vy=0; }
     temperature=1.0; startSimulation(); draw(); showToast('Repositioned non-fixed vertices.');
   }
-
   function clearFixedAll(){
     for (const n of nodes) n.fixed=false;
     temperature=Math.max(temperature,0.7); startSimulation(); draw(); showToast('All vertices are now unfixed.');
   }
-
-  // File upload: expects {"graph": { "(u,v,c1,c2)": weight, ... }}
-  async function handleFileSelection(ev){
-    const file = ev.target.files && ev.target.files[0];
-    if (!file) return;
-    try {
-      const text = await file.text();
-      const json = JSON.parse(text);
-      if (!json || typeof json !== 'object' || !json.graph || typeof json.graph !== 'object') {
-        throw new Error("File must be JSON with a top-level 'graph' object.");
-      }
-      input.value = JSON.stringify(json.graph, null, 2); // visible & editable
-      const {V,E} = parseEdgesFromMap(json.graph);
-      buildNodes(V, /*reuse=*/ true);  // preserve existing nodes if IDs match
-      buildEdges(E);
-      temperature = 1.0; draw(); startSimulation();
-      showToast(`Loaded from file: ${V.length} vertices, ${E.length} edges.`);
-    } catch (e) {
-      console.error(e);
-      showToast(e.message || 'Failed to parse file.', 2600);
-    } finally {
-      ev.target.value = ''; // allow same file to be selected again
-    }
+  function clearSelectedEdges(){
+    if (selectedEdges.size===0) return;
+    selectedEdges.clear(); refilterMatchings(); matchSlider.value = 0; draw(); showToast('Cleared selected edges.');
   }
 
-  // Buttons / Inputs
+  /* ---------- Wire up UI ---------- */
+  matchSlider.addEventListener('input', () => { updateMatchLabel(); draw(); });
   document.getElementById('loadBtn').addEventListener('click', loadGraphFromInput);
   document.getElementById('repositionBtn').addEventListener('click', repositionNonFixed);
   document.getElementById('clearFixBtn').addEventListener('click', clearFixedAll);
+  document.getElementById('clearSelBtn').addEventListener('click', clearSelectedEdges);
   fileInput.addEventListener('change', handleFileSelection);
 
-  // initial
+  // delegates already attached above for edge clicks
+  gEdges.addEventListener('pointerdown', onEdgePointer, {passive:true});
+  gEdges.addEventListener('mousedown', onEdgePointer, {passive:true}); // older engines
+
+  /* ---------- Kickoff ---------- */
   loadGraphFromInput();
 })();
 </script>
