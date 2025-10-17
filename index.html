@@ -36,33 +36,45 @@
   .footer { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--panel); padding: 10px 14px; border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.03); }
   .counts { color: #d7d7d7; } .truncate { color: #ffb454; }
 
-  /* Slider area (wide to show color bars) */
+  /* Slider area */
   .match-slider { position: absolute; right: 6px; top: 10px; bottom: 10px; width: 170px; pointer-events: none; }
   .slider-rail { position: absolute; right: 20px; top: 0; bottom: 0; width: 36px; display: flex; align-items: stretch; justify-content: center; }
-  .slider-rail input[type="range"] { pointer-events: auto; width: 36px; height: 100%; background: transparent; writing-mode: bt-lr; -webkit-appearance: slider-vertical; transform: scaleY(-1); }
-  .slider-rail input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; border-radius: 6px; background: var(--accent); border: 1px solid #2a2f3d; }
-  .slider-rail input[type="range"]::-moz-range-thumb { width: 20px; height: 20px; border: 0; border-radius: 6px; background: var(--accent); }
+  .slider-rail input[type="range"] { pointer-events: none; opacity: 0; width: 0; height: 0; }
 
-  /* Tick “barcode” rows (left of rail) */
-  .ticks { position: absolute; right: 86px; top: 10px; bottom: 10px; width: 84px; pointer-events: none; }
-  .tick-row { position: absolute; left: 0; height: 8px; display: flex; gap: 3px; align-items: center; transform: translateY(-4px); }
-  .tick-dot {
-    width: 4px; height: 4px; border-radius: 50%;
-    background: rgba(220,220,220,0.28);
-    opacity: 0.9;
+  /* Tick rows & groups */
+  .ticks {
+    position: absolute; right: 86px; top: 10px; bottom: 10px; width: 84px;
+    pointer-events: auto;              /* click/drag anywhere to snap */
+    overflow: visible;                 /* let active-box center at ends */
   }
-  .tick-dot.hl {
-    transform: scale(1.35);
-    box-shadow: 0 0 6px var(--c), 0 0 2px var(--c);
-    opacity: 1;
+  .tick-group {
+    position: absolute; z-index: 0;
+    border: 1px solid rgba(255,255,255,0.08); border-radius: 8px;
+    background: rgba(255,255,255,0.03);
   }
-  .tick-row.hidden { display: none; }
+  .tick-row {
+    position: absolute; height: 8px; display: flex; gap: 3px; align-items: center;
+    transform: translateY(-4px); z-index: 1; left: 0;
+    pointer-events: auto; cursor: pointer;
+  }
+  .tick-dot { width: 4px; height: 4px; border-radius: 50%; background: rgba(220,220,220,0.28); opacity: 0.9; transition: transform .06s linear; }
+  .tick-row.active .tick-dot { transform: scale(1.5); } /* emphasize active PM dots */
+  .tick-dot.hl { transform: scale(1.35); box-shadow: 0 0 6px var(--c), 0 0 2px var(--c); opacity: 1; }
+  .tick-row.faded { opacity: 0.14; filter: saturate(0.6) brightness(0.9); cursor: default; pointer-events: none; }
+  .tick-full { position: absolute; transform: translate(-50%, -6px); font-size: 11px; letter-spacing: 0.3px; color: rgba(220,220,220,0.5); z-index: 1; }
 
-  /* “full” label at the top position */
-  .tick-full {
-    position: absolute; left: 0; transform: translateY(-6px);
-    font-size: 11px; letter-spacing: 0.3px; color: rgba(220,220,220,0.5);
+  /* Draggable active box (custom thumb) */
+  .active-box {
+    position: absolute; z-index: 2;
+    border: 1px solid rgba(255,255,255,0.24);
+    background: rgba(255,255,255,0.10);
+    border-radius: 8px;
+    pointer-events: auto;
+    cursor: grab;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.25), inset 0 0 0 1px rgba(0,0,0,0.12);
+    transform: translateY(-50%); /* center on the row */
   }
+  .active-box.dragging { cursor: grabbing; }
 
   /* Interactivity */
   #edges { pointer-events: all; }
@@ -79,6 +91,7 @@
         <button id="repositionBtn">Reposition</button>
         <button id="clearFixBtn">Clear Fixed</button>
         <button id="clearSelBtn">Clear Edges</button>
+        <button id="downloadBtn" title="Download current SVG">Download SVG</button>
         <label class="file-btn" title="Upload a JSON file containing { &quot;graph&quot;: { &quot;(u,v,c1,c2)&quot;: weight, ... } }">
           <input type="file" id="fileInput" accept=".json,application/json" />
           Upload JSON
@@ -114,13 +127,11 @@
         <div style="width:16px;height:16px;border:2px solid #aaa; transform: rotate(45deg);"></div>
         <div class="num">neg. weight</div>
       </div>
-      <div class="hint">
-        Input format: <code>{"(u, v, c1, c2)": weight, ...}</code> or a JSON file with top-level <code>"graph"</code>.
-      </div>
+      <div class="hint">Input format: <code>{"(u, v, c1, c2)": weight, ...}</code> or a JSON file with top-level <code>"graph"</code>.</div>
     </aside>
 
     <main class="canvas-wrap">
-      <svg id="svg" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice" aria-label="graph canvas">
+      <svg id="svg" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice" aria-label="graph canvas" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
             <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="blur"/>
@@ -134,7 +145,8 @@
       <div class="match-slider">
         <div class="ticks" id="ticks"></div>
         <div class="slider-rail">
-          <input id="matchSlider" type="range" orient="vertical" min="0" max="0" step="1" value="0" title="Top = full graph; positions fixed and filtered by selection" />
+          <!-- hidden native slider kept for state/keyboard if needed -->
+          <input id="matchSlider" type="range" orient="vertical" min="0" max="0" step="1" value="0" />
         </div>
       </div>
 
@@ -160,6 +172,7 @@
   const truncateNote = document.getElementById('truncateNote');
   const matchSlider = document.getElementById('matchSlider');
   const ticksEl = document.getElementById('ticks');
+  const downloadBtn = document.getElementById('downloadBtn');
 
   /* ---------- Colors & constants ---------- */
   const colorMap = { 0:'#4ea1ff', 1:'#ff6b6b', 2:'#6ede8a', 3:'#ffa94d', 4:'#b28dff' };
@@ -167,6 +180,9 @@
   const FIXED_FILL = getComputedStyle(document.documentElement).getPropertyValue('--fixed-fill').trim() || '#21314f';
   const DIM_OPACITY = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--dim')) || 0.18;
   const SEL_THICK = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sel-thick')) || 6;
+
+  // Dot metrics & layout padding
+  const DOT = 4, GAP = 3, GROUP_PAD = 6;
 
   /* ---------- State ---------- */
   let nodes=[], edges=[], pairToEdges=new Map(), uniquePairs=new Set(), selectedEdges=new Set(), vertexOrder=[];
@@ -180,9 +196,60 @@
   const DAMPING=0.85, MAX_SPEED=12; let temperature=1.0;
   let simRunning=false, dragging=null, lastTick=performance.now();
 
-  /* ---------- Helpers ---------- */
+  /* ---------- Slider helpers (custom thumb) ---------- */
+  const activeBox = document.createElement('div');
+  activeBox.className = 'active-box';
+  ticksEl.appendChild(activeBox);
+
+  let tickMetrics = { H:0, W:0, rowLeft:0, dotsW:0, singleH:12 };
+
+  function positionActiveBox(){
+    const m = allData.length;
+    const H = tickMetrics.H || ticksEl.clientHeight || 1;
+    const boxH = tickMetrics.singleH;
+    const yCenter = (m === 0) ? 0 : (+matchSlider.value / m) * H; // 0=full, m=last PM
+    activeBox.style.top = `${yCenter}px`;      // centered via CSS translateY(-50%)
+    activeBox.style.left = `${Math.max(0, tickMetrics.rowLeft - GROUP_PAD)}px`;
+    activeBox.style.width = `${Math.min(tickMetrics.W, tickMetrics.dotsW + GROUP_PAD * 2)}px`;
+    activeBox.style.height = `${Math.round(boxH)}px`;
+  }
+
+  function startThumbDrag(ev){
+    ev.preventDefault();
+    activeBox.classList.add('dragging');
+    window.addEventListener('pointermove', onThumbDrag);
+    window.addEventListener('pointerup', endThumbDrag, {once:true});
+    onThumbDrag(ev);
+  }
+  function onThumbDrag(ev){
+    const rect = ticksEl.getBoundingClientRect();
+    let y = (ev.touches?.[0]?.clientY ?? ev.clientY) - rect.top;
+    y = Math.max(0, Math.min(rect.height, y));
+    const m = allData.length;
+    if (m === 0) { matchSlider.value = '0'; positionActiveBox(); draw(); return; }
+    const rawIdx = Math.round((y / rect.height) * m); // 0..m
+    const allowed = new Set(filteredIndices);
+    const snapped = nearestAllowed(rawIdx, allowed, m);
+    if (+matchSlider.value !== snapped){
+      matchSlider.value = String(snapped);
+      draw();
+      renderTicksFixed(); // refresh active-row styling
+    }
+    positionActiveBox();
+  }
+  function endThumbDrag(){
+    activeBox.classList.remove('dragging');
+    window.removeEventListener('pointermove', onThumbDrag);
+  }
+
+  // Drag by grabbing the box (stop bubbling to avoid double start)
+  activeBox.addEventListener('pointerdown', (ev)=>{ ev.stopPropagation(); startThumbDrag(ev); });
+  // Click/drag anywhere in the ticks area to jump/snap
+  ticksEl.addEventListener('pointerdown', startThumbDrag);
+
+  /* ---------- UI helpers ---------- */
   function showToast(msg, ms = 1400) { toast.textContent = msg; toast.style.display = 'block'; clearTimeout(showToast._t); showToast._t = setTimeout(()=>toast.style.display='none', ms); }
-  function getBoundsFromSVG(){ const r=svg.getBoundingClientRect(); WIDTH=Math.max(400,Math.floor(r.width)); HEIGHT=Math.max(300,Math.floor(r.height)); }
+  function getBoundsFromSVG(){ const r=svg.getBoundingClientRect(); WIDTH=Math.max(400,Math.floor(r.width)); HEIGHT=Math.max(300,Math.floor(r.height)); renderTicksFixed(); }
   getBoundsFromSVG(); addEventListener('resize', getBoundsFromSVG);
   const pairKey=(a,b)=> a<b?`${a},${b}`:`${b},${a}`;
   const randomPos=()=>({ x:PADDING+Math.random()*(WIDTH-2*PADDING), y:PADDING+Math.random()*(HEIGHT-2*PADDING) });
@@ -294,9 +361,8 @@
     truncateNote.style.display = truncated ? '' : 'none';
   }
 
-  /* ---------- Fixed-position ticks with highlight ---------- */
+  /* ---------- Ticks: groups + highlight + fading + active row ---------- */
   function highlightedVertexSet() {
-    // Vertices incident to any selected edge
     const s = new Set();
     if (selectedEdges.size === 0) return s;
     const vIndex = new Map(vertexOrder.map((v,i)=>[v,i]));
@@ -307,25 +373,66 @@
     return s;
   }
 
+  function computeColorGroups() {
+    const groups = [];
+    if (allData.length === 0) return groups;
+    let i = 0;
+    while (i < allData.length) {
+      const k = allData[i].key;
+      let j = i;
+      while (j + 1 < allData.length && allData[j + 1].key === k) j++;
+      groups.push({ start: i + 1, end: j + 1, key: k });
+      i = j + 1;
+    }
+    return groups;
+  }
+
   function renderTicksFixed(){
     ticksEl.innerHTML='';
-    const total = allData.length + 1; // include "full" at 0
-    if (total<=1) return;
-
-    const allowed = new Set(filteredIndices); // 1-based indices visible
+    ticksEl.appendChild(activeBox); // keep activeBox on top
+    const total = allData.length + 1;
+    const allowed = new Set(filteredIndices);
     const hlVerts = highlightedVertexSet();
 
-    for (let i=0;i<total;i++){
+    // Metrics
+    const H = ticksEl.clientHeight;
+    const W = ticksEl.clientWidth;
+    const nVerts = vertexOrder.length || (allData[0]?.colors.length ?? 0);
+    const dotsW = nVerts > 0 ? (DOT * nVerts + GAP * (nVerts - 1)) : 0;
+    const rowLeft = Math.max(0, (W - dotsW) / 2);
+    const singleH = (allData.length > 0) ? Math.max(8, H / allData.length) : 12;
+    tickMetrics = { H, W, rowLeft, dotsW, singleH };
+
+    // Group boxes (including size-1)
+    const groups = computeColorGroups();
+    const m = allData.length || 1;
+    for (const g of groups) {
+      const topPx = Math.max(0, ((g.start - 0.5) / m) * H);
+      const botPx = Math.min(H, ((g.end + 0.5) / m) * H);
+      const box = document.createElement('div');
+      box.className = 'tick-group';
+      box.style.top = `${topPx}px`;
+      box.style.height = `${Math.max(8, botPx - topPx)}px`;
+      box.style.left = `${Math.max(0, rowLeft - GROUP_PAD)}px`;
+      box.style.width = `${Math.min(W, dotsW + GROUP_PAD * 2)}px`;
+      ticksEl.appendChild(box);
+    }
+
+    // "full" label centered
+    const lab = document.createElement('div');
+    lab.className = 'tick-full';
+    lab.style.top = `0%`;
+    lab.style.left = `${rowLeft + dotsW / 2}px`;
+    lab.textContent = 'full';
+    ticksEl.appendChild(lab);
+
+    // Rows (centered horizontally)
+    const pos = +matchSlider.value;
+    for (let i=1;i<=allData.length;i++){
       const y = (i/(total-1))*100;
-      if (i===0){
-        const lab = document.createElement('div');
-        lab.className = 'tick-full';
-        lab.style.top = `${y}%`;
-        lab.textContent = 'full';
-        ticksEl.appendChild(lab);
-        continue;
-      }
       const row=document.createElement('div'); row.className='tick-row'; row.style.top=`${y}%`;
+      row.style.left = `${rowLeft}px`;
+      row.dataset.idx = String(i);
 
       const data = allData[i-1];
       for (let vi=0; vi<data.colors.length; vi++){
@@ -334,21 +441,24 @@
         const col = colorMap[cval] || 'rgba(220,220,220,0.28)';
         d.style.background = col;
         d.style.setProperty('--c', col);
-        if (hlVerts.has(vi)) d.classList.add('hl'); // glow + brighten
+        if (hlVerts.has(vi)) d.classList.add('hl');
         row.appendChild(d);
       }
 
-      if (!allowed.has(i)) row.classList.add('hidden');
+      if (!allowed.has(i)) row.classList.add('faded');
+      if (pos === i) row.classList.add('active');
       ticksEl.appendChild(row);
     }
+
+    // Place active box (also wraps "full" when value is 0)
+    positionActiveBox();
   }
 
   function applyMatchingSliderLimitsFixed(){
-    // slider range fixed to full list
     matchSlider.min = 0;
     matchSlider.max = allData.length;
 
-    // snap current value to nearest visible position (or 0)
+    // snap current value to nearest allowed (or 0)
     const allowed = new Set(filteredIndices);
     const v = +matchSlider.value;
     if (!(v===0 || allowed.has(v))){
@@ -454,12 +564,12 @@
     const el=findEdgeElementWithEid(ev); if(!el) return;
     const eid=parseInt(el.getAttribute('data-eid'),10); if(!Number.isFinite(eid)) return;
     if (selectedEdges.has(eid)) selectedEdges.delete(eid); else selectedEdges.add(eid);
-    refilterMatchings(); // will re-render ticks with highlight
+    refilterMatchings(); // update ticks/active box
   }
+  // single, robust listener (avoid duplicate events across browsers)
   gEdges.addEventListener('pointerdown', onEdgePointer, {passive:true});
-  gEdges.addEventListener('mousedown', onEdgePointer, {passive:true});
 
-  /* ---------- Physics & drag ---------- */
+  /* ---------- Physics & drag for nodes ---------- */
   function tickLayout(dt){
     for (let i=0;i<nodes.length;i++){
       const ni=nodes[i];
@@ -528,14 +638,8 @@
   function clearFixedAll(){ for(const n of nodes) n.fixed=false; temperature=Math.max(temperature,0.7); startSimulation(); draw(); showToast('All vertices are now unfixed.'); }
   function clearSelectedEdges(){ if(selectedEdges.size===0) return; selectedEdges.clear(); refilterMatchings(); matchSlider.value='0'; draw(); showToast('Cleared selected edges.'); }
 
-  // Slider input: snap to nearest visible position
-  matchSlider.addEventListener('input', () => {
-    const allowed = new Set(filteredIndices);
-    const v = Math.round(+matchSlider.value);
-    const snapped = nearestAllowed(v, allowed, allData.length);
-    if (snapped !== v) matchSlider.value = String(snapped);
-    draw();
-  });
+  // Keep keyboard/script changes in sync (if you tweak matchSlider programmatically)
+  matchSlider.addEventListener('input', () => { draw(); renderTicksFixed(); positionActiveBox(); });
 
   document.getElementById('loadBtn').addEventListener('click', loadGraphFromInput);
   document.getElementById('repositionBtn').addEventListener('click', repositionNonFixed);
@@ -543,8 +647,20 @@
   document.getElementById('clearSelBtn').addEventListener('click', clearSelectedEdges);
   fileInput.addEventListener('change', handleFileSelection);
 
-  gEdges.addEventListener('pointerdown', onEdgePointer, {passive:true});
-  gEdges.addEventListener('mousedown', onEdgePointer, {passive:true});
+  /* ---------- Download SVG ---------- */
+  function downloadSVG(){
+    const clone = svg.cloneNode(true);
+    clone.setAttribute('xmlns','http://www.w3.org/2000/svg');
+    clone.setAttribute('xmlns:xlink','http://www.w3.org/1999/xlink');
+    const rect = svg.getBoundingClientRect();
+    clone.setAttribute('width', Math.round(rect.width));
+    clone.setAttribute('height', Math.round(rect.height));
+    const xml = '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(clone);
+    const blob = new Blob([xml], {type: 'image/svg+xml;charset=utf-8'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'graph-explore.svg'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  }
+  downloadBtn.addEventListener('click', downloadSVG);
 
   /* kickoff */
   loadGraphFromInput();
