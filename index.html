@@ -80,6 +80,34 @@
   #edges { pointer-events: all; }
   .edge { pointer-events: stroke; cursor: pointer; }
   .mid-diamond { pointer-events: none; }
+
+  /* Select styling to match buttons */
+  select#graphSelect {
+    background: var(--btn);
+    color: var(--text);
+    border: 1px solid #272b35;
+    border-radius: 10px;
+    padding: 8px 10px;
+    cursor: pointer;
+  }
+
+  /* Toolbar grouping */
+  .tool-group {
+    display: inline-flex;
+    gap: 8px;
+    align-items: center;
+    padding: 6px 8px;
+    border: 1px solid #272b35;
+    border-radius: 10px;
+    background: #11131a;
+  }
+  .group-title {
+    font-size: 11px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .6px;
+    margin-right: 6px; padding-right: 8px;
+    border-right: 1px solid #272b35;
+    user-select: none;
+  }
 </style>
 </head>
 <body>
@@ -87,15 +115,34 @@
     <header>
       <h1>graph explore</h1>
       <div class="controls">
-        <button id="loadBtn">Load Graph</button>
-        <button id="repositionBtn">Reposition</button>
-        <button id="clearFixBtn">Clear Fixed</button>
-        <button id="clearSelBtn">Clear Edges</button>
-        <button id="downloadBtn" title="Download current SVG">Download SVG</button>
-        <label class="file-btn" title="Upload a JSON file containing { &quot;graph&quot;: { &quot;(u,v,c1,c2)&quot;: weight, ... } }">
-          <input type="file" id="fileInput" accept=".json,application/json" />
-          Upload JSON
-        </label>
+        <div class="tool-group" aria-label="Open group">
+          <div class="group-title">Open</div>
+          <label class="file-btn" title="Upload a JSON file containing { &quot;graph&quot;: { &quot;(u,v,c1,c2)&quot;: weight, ... } }">
+            <input type="file" id="fileInput" accept=".json,application/json" />
+            Upload JSON
+          </label>
+          <select id="graphSelect" title="Load a saved graph from /graphs" aria-label="Saved graphs">
+            <option value="" selected>Select graph…</option>
+          </select>
+        </div>
+
+        <div class="tool-group" aria-label="Layout group">
+          <div class="group-title">Layout</div>
+          <button id="repositionBtn">Reposition</button>
+          <button id="clearFixBtn">Clear Fixed</button>
+        </div>
+
+        <div class="tool-group" aria-label="Filter group">
+          <div class="group-title">Filter</div>
+          <button id="clearSelBtn" title="Clear selected edges constraint">Clear Edges</button>
+        </div>
+
+        <div class="tool-group" aria-label="Export group">
+          <div class="group-title">Export</div>
+          <button id="downloadBtn" title="Download current SVG">Download SVG</button>
+          <button id="downloadJsonBtn" title="Download graph + layout JSON">Download JSON</button>
+        </div>
+
         <span class="hint">Drag a vertex to fix it; click a fixed one to release. Click an edge to filter by that exact edge.</span>
       </div>
     </header>
@@ -118,6 +165,9 @@
   "(1, 6, 1, 0)": -1.0,
   "(6, 7, 0, 0)": 1.0
 }</textarea>
+  <div>
+    <button id="loadBtn" title="Load graph from textarea">Load Graph</button>
+  </div>
       <div class="legend" aria-label="Color legend">
         <div class="badge blue"></div><div class="num">0</div>
         <div class="badge red"></div><div class="num">1</div>
@@ -173,6 +223,8 @@
   const matchSlider = document.getElementById('matchSlider');
   const ticksEl = document.getElementById('ticks');
   const downloadBtn = document.getElementById('downloadBtn');
+  const downloadJsonBtn = document.getElementById('downloadJsonBtn');
+  const graphSelect = document.getElementById('graphSelect');
 
   /* ---------- Colors & constants ---------- */
   const colorMap = { 0:'#4ea1ff', 1:'#ff6b6b', 2:'#6ede8a', 3:'#ffa94d', 4:'#b28dff' };
@@ -623,13 +675,37 @@
     showToast(`Loaded graph: ${V.length} vertices, ${E.length} edges. Found ${allData.length}${truncated?' (truncated)':''} perfect matchings.`);
   }
   function loadGraphFromInput(){ try{ const {V,E}=parseGraphObject(input.value); loadGraphCommon(V,E); }catch(e){ showToast(e.message||'Failed to load graph.',2400); } }
+  function loadGraphFromJSON(json){
+    if(!json || typeof json!=='object' || !json.graph || typeof json.graph!=='object') throw new Error("File must be JSON with a top-level 'graph' object.");
+    input.value = JSON.stringify(json.graph, null, 2);
+    const {V,E}=parseEdgesFromMap(json.graph); 
+    loadGraphCommon(V,E);
+    // If vertex positions are provided, apply them and fix all vertices
+    if (json.vertexpositions && typeof json.vertexpositions === 'object'){
+      const posMap = json.vertexpositions;
+      for (const n of nodes){
+        const key = String(n.id);
+        const p = posMap[key];
+        if (p && typeof p === 'object'){
+          const x = Number(p.x);
+          const y = Number(p.y);
+          if (Number.isFinite(x)) n.x = x;
+          if (Number.isFinite(y)) n.y = y;
+        }
+        n.fixed = true; // all vertices start fixed when loaded with positions
+        n.vx = 0; n.vy = 0;
+      }
+      temperature = Math.max(temperature, 0.03);
+      draw();
+      showToast('Loaded graph with saved vertex positions (all fixed).');
+    }
+  }
+
   async function handleFileSelection(ev){
     const file=ev.target.files&&ev.target.files[0]; if(!file) return;
     try{
       const text=await file.text(); const json=JSON.parse(text);
-      if(!json || typeof json!=='object' || !json.graph || typeof json.graph!=='object') throw new Error("File must be JSON with a top-level 'graph' object.");
-      input.value = JSON.stringify(json.graph, null, 2);
-      const {V,E}=parseEdgesFromMap(json.graph); loadGraphCommon(V,E);
+      loadGraphFromJSON(json);
     }catch(e){ showToast(e.message||'Failed to parse file.',2400); }
     finally{ ev.target.value=''; }
   }
@@ -662,8 +738,102 @@
   }
   downloadBtn.addEventListener('click', downloadSVG);
 
+  /* ---------- Download graph + layout JSON ---------- */
+  function buildGraphObjectFromEdges(){
+    const obj = {};
+    for (const e of edges){
+      const key = `(${e.u}, ${e.v}, ${e.c1}, ${e.c2})`;
+      obj[key] = e.w;
+    }
+    return obj;
+  }
+  function buildVertexPositions(){
+    const vp = {};
+    for (const n of nodes){ vp[String(n.id)] = { x: Number(n.x)||0, y: Number(n.y)||0 }; }
+    return vp;
+  }
+  function downloadGraphJSON(){
+    try{
+      const payload = {
+        graph: buildGraphObjectFromEdges(),
+        vertexpositions: buildVertexPositions()
+      };
+      const text = JSON.stringify(payload, null, 2);
+      const blob = new Blob([text], { type: 'application/json;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = 'graph-explore.json'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+      showToast('Downloaded graph + layout JSON');
+    }catch(e){
+      showToast('Failed to build JSON for download.', 2000);
+    }
+  }
+  downloadJsonBtn.addEventListener('click', downloadGraphJSON);
+
+  /* ---------- Load from /graphs manifest ---------- */
+  function normalizeManifest(man){
+    const items=[];
+    if (!man) return items;
+    const pushItem=(p,l)=>{ if (typeof p!== 'string') return; items.push({ path: p, label: (typeof l==='string'&&l)||p.split('/').pop() }); };
+    if (Array.isArray(man)){
+      for (const p of man) pushItem(p);
+    } else if (Array.isArray(man.files)){
+      for (const p of man.files) pushItem(p);
+    } else if (Array.isArray(man.graphs)){
+      for (const p of man.graphs) pushItem(p);
+    } else if (Array.isArray(man.items)){
+      for (const it of man.items) pushItem(it.path||it.file||it.name, it.label||it.title);
+    }
+    return items;
+  }
+
+  async function populateGraphSelect(){
+    if (!graphSelect) return;
+    try{
+      const res = await fetch('graphs/manifest.json', { cache: 'no-store' });
+      if (!res.ok) throw new Error('manifest fetch failed');
+      const man = await res.json();
+      const entries = normalizeManifest(man).map(e=>{
+        const fullPath = e.path.includes('/') ? e.path : `graphs/${e.path}`;
+        const baseLabel = (e.label || e.path || '').split('/').pop();
+        const cleanLabel = baseLabel.replace(/\.json$/i, '');
+        return { path: fullPath, label: cleanLabel };
+      });
+      // Clear options except placeholder
+      graphSelect.length = 1;
+      for (const {path,label} of entries){
+        const opt = document.createElement('option');
+        opt.value = path; opt.textContent = label;
+        graphSelect.appendChild(opt);
+      }
+      if (entries.length===0){ graphSelect.disabled = true; graphSelect.title = 'No graphs listed in manifest.json'; }
+    }catch{
+      graphSelect.disabled = true; graphSelect.title = 'Could not load graphs/manifest.json';
+    }
+  }
+
+  async function loadGraphFromURL(url){
+    try{
+      const res = await fetch(url, { cache: 'no-store' });
+      if (!res.ok) throw new Error(`Failed to fetch ${url}`);
+      const json = await res.json();
+      loadGraphFromJSON(json);
+      showToast(`Loaded ${url.split('/').pop()}`);
+    }catch(e){
+      showToast(e.message || 'Failed to load selected graph.', 2200);
+    }
+  }
+
+  if (graphSelect){
+    graphSelect.addEventListener('change', () =>{
+      const url = graphSelect.value;
+      if (!url) return;
+      loadGraphFromURL(url);
+    });
+  }
+
   /* kickoff */
   loadGraphFromInput();
+  populateGraphSelect();
 })();
 </script>
 </body>
