@@ -26,6 +26,7 @@
   .legend { display: grid; grid-template-columns: auto auto; gap: 6px 10px; align-items: center; background: #11131a; padding: 8px 10px; border-radius: 10px; border: 1px solid #272b35; }
   .badge { width: 16px; height: 16px; border-radius: 50%; border: 2px solid #202533; box-sizing: border-box; }
   .blue { background: #4ea1ff; } .red { background: #ff6b6b; } .green { background: #6ede8a; } .orange { background: #ffa94d; } .purple { background: #b28dff; }
+  .cyan { background: #2ed3ea; } .yellow { background: #ffd166; } .pink { background: #ff85c0; }
   .num { color: #dcdcdc; font-weight: 600; font-size: 12px; }
 
   .canvas-wrap { position: relative; background: #0b0d12; border-radius: 12px; overflow: hidden; border: 1px solid #1e2230; }
@@ -108,6 +109,27 @@
     border-right: 1px solid #272b35;
     user-select: none;
   }
+
+  /* Positions panel */
+  .pos-panel {
+    margin-top: 8px;
+    background: #11131a;
+    border: 1px solid #272b35;
+    border-radius: 10px;
+    padding: 8px;
+  }
+  .pos-header { font-size: 12px; color: var(--muted); margin: 2px 0 8px; letter-spacing: .3px; }
+  /* Make header a clickable toggle */
+  button.pos-header { display:flex; align-items:center; justify-content:space-between; width:100%; background:none; border:none; padding:4px 2px 8px; cursor:pointer; color: var(--muted); }
+  .pos-panel.collapsed .pos-list { display:none; }
+  .caret { display:inline-block; transition: transform .15s ease; margin-left: 8px; color:#c6cad1; }
+  .pos-panel.collapsed .caret { transform: rotate(0deg); }
+  .pos-panel:not(.collapsed) .caret { transform: rotate(90deg); }
+  .pos-list { display: grid; grid-template-columns: 1fr; gap: 6px; max-height: 220px; overflow: auto; padding-right: 4px; }
+  .pos-row { display: grid; grid-template-columns: 40px 1fr 1fr; gap: 8px; align-items: center; }
+  .pos-id { justify-self: end; color: #d7d7d7; font-weight: 600; font-size: 12px; }
+  .pos-input { width: 100%; background: #0d0f14; color: var(--text); border: 1px solid #272b35; border-radius: 8px; padding: 6px 8px; font-family: ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size: 12px; }
+  .pos-input:focus { outline: none; border-color: #394153; box-shadow: 0 0 0 2px rgba(122,162,247,0.12); }
 </style>
 </head>
 <body>
@@ -165,15 +187,26 @@
   "(1, 6, 1, 0)": -1.0,
   "(6, 7, 0, 0)": 1.0
 }</textarea>
-  <div>
-    <button id="loadBtn" title="Load graph from textarea">Load Graph</button>
-  </div>
+      <div>
+        <button id="loadBtn" title="Load graph from textarea">Load Graph</button>
+      </div>
+
+      <div id="posPanel" class="pos-panel collapsed" aria-label="Vertex positions">
+        <button id="posToggle" class="pos-header" aria-expanded="false" aria-controls="posList">
+          <span>Vertex positions (edit to update; values auto-refresh while moving)</span>
+          <span class="caret">▶</span>
+        </button>
+        <div class="pos-list" id="posList"></div>
+      </div>
       <div class="legend" aria-label="Color legend">
         <div class="badge blue"></div><div class="num">0</div>
         <div class="badge red"></div><div class="num">1</div>
         <div class="badge green"></div><div class="num">2</div>
         <div class="badge orange"></div><div class="num">3</div>
         <div class="badge purple"></div><div class="num">4</div>
+        <div class="badge cyan"></div><div class="num">5</div>
+        <div class="badge yellow"></div><div class="num">6</div>
+        <div class="badge pink"></div><div class="num">7</div>
         <div style="width:16px;height:16px;border:2px solid #aaa; transform: rotate(45deg);"></div>
         <div class="num">neg. weight</div>
       </div>
@@ -225,9 +258,21 @@
   const downloadBtn = document.getElementById('downloadBtn');
   const downloadJsonBtn = document.getElementById('downloadJsonBtn');
   const graphSelect = document.getElementById('graphSelect');
+  const posPanel = document.getElementById('posPanel');
+  const posList = document.getElementById('posList');
+  const posToggle = document.getElementById('posToggle');
 
   /* ---------- Colors & constants ---------- */
-  const colorMap = { 0:'#4ea1ff', 1:'#ff6b6b', 2:'#6ede8a', 3:'#ffa94d', 4:'#b28dff' };
+  const colorMap = {
+    0:'#4ea1ff', // blue
+    1:'#ff6b6b', // red
+    2:'#6ede8a', // green
+    3:'#ffa94d', // orange
+    4:'#b28dff', // purple
+    5:'#2ed3ea', // cyan
+    6:'#ffd166', // yellow
+    7:'#ff85c0'  // pink
+  };
   const NEUTRAL = '#9aa0a6';
   const FIXED_FILL = getComputedStyle(document.documentElement).getPropertyValue('--fixed-fill').trim() || '#21314f';
   const DIM_OPACITY = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--dim')) || 0.18;
@@ -235,6 +280,7 @@
 
   // Dot metrics & layout padding
   const DOT = 4, GAP = 3, GROUP_PAD = 6;
+  const CLAMP_PAD = 20; // for keeping nodes inside canvas when typing
 
   /* ---------- State ---------- */
   let nodes=[], edges=[], pairToEdges=new Map(), uniquePairs=new Set(), selectedEdges=new Set(), vertexOrder=[];
@@ -247,6 +293,7 @@
   const SPRING_LENGTH=120, SPRING_K=0.08, CHARGE=14000;
   const DAMPING=0.85, MAX_SPEED=12; let temperature=1.0;
   let simRunning=false, dragging=null, lastTick=performance.now();
+  const posInputs = new Map(); // id -> { xEl, yEl, editX:boolean, editY:boolean }
 
   /* ---------- Slider helpers (custom thumb) ---------- */
   const activeBox = document.createElement('div');
@@ -305,6 +352,9 @@
   getBoundsFromSVG(); addEventListener('resize', getBoundsFromSVG);
   const pairKey=(a,b)=> a<b?`${a},${b}`:`${b},${a}`;
   const randomPos=()=>({ x:PADDING+Math.random()*(WIDTH-2*PADDING), y:PADDING+Math.random()*(HEIGHT-2*PADDING) });
+  const clampX=(x)=> Math.max(CLAMP_PAD, Math.min(WIDTH-CLAMP_PAD, x));
+  const clampY=(y)=> Math.max(CLAMP_PAD, Math.min(HEIGHT-CLAMP_PAD, y));
+  const fmtPos=(v)=> Math.round((+v||0)*10)/10;
 
   // SVG helpers
   function lineEl(x1,y1,x2,y2,stroke,width,opacity,eid,glow=false){
@@ -325,7 +375,7 @@
   /* ---------- Parsing ---------- */
   function parseGraphObject(text){ let obj; try{ obj=JSON.parse(text); }catch{ throw new Error('Invalid JSON in textarea.'); } return parseEdgesFromMap(obj); }
   function parseEdgesFromMap(objMap){
-    const E=[], Vset=new Set(); const valid=new Set([0,1,2,3,4]);
+    const E=[], Vset=new Set(); const valid=new Set([0,1,2,3,4,5,6,7]);
     for (const [k,w] of Object.entries(objMap)){
       const m=k.match(/^\s*\(\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*\)\s*$/);
       if (!m) throw new Error(`Bad edge key: ${k}`);
@@ -352,6 +402,48 @@
       const r=randomPos(); return { id, x:r.x, y:r.y, vx:0, vy:0, fixed:false };
     });
     vertexOrder = ids.slice();
+  }
+  function rebuildPositionPanel(){
+    if (!posList) return;
+    posList.innerHTML = '';
+    posInputs.clear();
+    const byId = new Map(nodes.map(n=>[n.id,n]));
+    for (const vid of vertexOrder){
+      const n = byId.get(vid); if (!n) continue;
+      const row = document.createElement('div'); row.className = 'pos-row';
+      const idEl = document.createElement('div'); idEl.className = 'pos-id'; idEl.textContent = String(vid);
+      const xEl = document.createElement('input'); xEl.className='pos-input'; xEl.type='number'; xEl.step='1'; xEl.inputMode='decimal'; xEl.ariaLabel = `x for vertex ${vid}`;
+      const yEl = document.createElement('input'); yEl.className='pos-input'; yEl.type='number'; yEl.step='1'; yEl.inputMode='decimal'; yEl.ariaLabel = `y for vertex ${vid}`;
+      xEl.value = String(fmtPos(n.x)); yEl.value = String(fmtPos(n.y));
+      const ent = { xEl, yEl, editX:false, editY:false };
+      posInputs.set(vid, ent);
+
+      const applyX = () => {
+        const v = Number(xEl.value);
+        if (!Number.isFinite(v)) return;
+        n.x = clampX(v);
+        n.fixed = true; n.vx=0; n.vy=0;
+        draw();
+      };
+      const applyY = () => {
+        const v = Number(yEl.value);
+        if (!Number.isFinite(v)) return;
+        n.y = clampY(v);
+        n.fixed = true; n.vx=0; n.vy=0;
+        draw();
+      };
+      xEl.addEventListener('focus', ()=>{ ent.editX=true; });
+      xEl.addEventListener('blur', ()=>{ ent.editX=false; applyX(); });
+      xEl.addEventListener('input', applyX);
+      yEl.addEventListener('focus', ()=>{ ent.editY=true; });
+      yEl.addEventListener('blur', ()=>{ ent.editY=false; applyY(); });
+      yEl.addEventListener('input', applyY);
+
+      row.appendChild(idEl);
+      row.appendChild(xEl);
+      row.appendChild(yEl);
+      posList.appendChild(row);
+    }
   }
 
   /* ---------- Perfect matchings (sorted by vertex coloring) ---------- */
@@ -604,6 +696,18 @@
       const hit=document.createElementNS('http://www.w3.org/2000/svg','circle'); hit.setAttribute('cx',n.x); hit.setAttribute('cy',n.y); hit.setAttribute('r',18); hit.setAttribute('fill','transparent'); hit.style.pointerEvents='all'; hit.addEventListener('mousedown', ev=>startDrag(ev,n)); hit.addEventListener('touchstart', ev=>{ ev.preventDefault(); startDrag(ev,n); }, {passive:false}); fragN.appendChild(hit);
     }
     gNodes.replaceChildren(fragN);
+
+    // Sync position inputs (without fighting active edits)
+    if (posInputs.size){
+      for (const n of nodes){
+        const ent = posInputs.get(n.id);
+        if (!ent) continue;
+        const xStr = String(fmtPos(n.x));
+        const yStr = String(fmtPos(n.y));
+        if (!ent.editX && ent.xEl.value !== xStr) ent.xEl.value = xStr;
+        if (!ent.editY && ent.yEl.value !== yStr) ent.yEl.value = yStr;
+      }
+    }
   }
 
   /* ---------- Edge selection ---------- */
@@ -673,6 +777,7 @@
     updateCounts();
     draw();
     showToast(`Loaded graph: ${V.length} vertices, ${E.length} edges. Found ${allData.length}${truncated?' (truncated)':''} perfect matchings.`);
+    rebuildPositionPanel();
   }
   function loadGraphFromInput(){ try{ const {V,E}=parseGraphObject(input.value); loadGraphCommon(V,E); }catch(e){ showToast(e.message||'Failed to load graph.',2400); } }
   function loadGraphFromJSON(json){
@@ -697,6 +802,7 @@
       }
       temperature = Math.max(temperature, 0.03);
       draw();
+      rebuildPositionPanel();
       showToast('Loaded graph with saved vertex positions (all fixed).');
     }
   }
@@ -768,6 +874,13 @@
     }
   }
   downloadJsonBtn.addEventListener('click', downloadGraphJSON);
+  if (posToggle){
+    posToggle.addEventListener('click', ()=>{
+      const collapsed = posPanel.classList.toggle('collapsed');
+      posToggle.setAttribute('aria-expanded', String(!collapsed));
+      if (!collapsed) rebuildPositionPanel();
+    });
+  }
 
   /* ---------- Load from /graphs manifest ---------- */
   function normalizeManifest(man){
